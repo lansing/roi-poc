@@ -1,0 +1,14 @@
+# video files (inputs, converted streams, generated outputs)
+bgs_harness/input_videos/
+bgs_harness/processed_videos/
+bgs_harness/outputs/
+
+# virtualenv and python build artifacts
+bgs_harness/.venv/
+**/__pycache__/
+*.egg-info/
+
+# generated at runtime
+bgs_harness/config/
+*.log
+.DS_Store

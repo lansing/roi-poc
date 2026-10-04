@@ -1,0 +1,50 @@
+{
+  "stream": {
+    "codec": "h264",
+    "bitrate_kbps": 1000,
+    "width": 1280,
+    "height": 720,
+    "fps": 5
+  },
+  "algorithms": [
+    "AdaptiveBackgroundLearning",
+    "AdaptiveSelectiveBackgroundLearning",
+    "CodeBook",
+    "FuzzyChoquetIntegral",
+    "FuzzySugenoIntegral",
+    "IndependentMultimodal",
+    "KNN",
+    "PAWCS",
+    "TwoPoints",
+    "VuMeter",
+    "WeightedMovingVariance",
+    "ViBe",
+    "StaticFrameDifference",
+    "SuBSENSE",
+    "LOBSTER",
+    "WeightedMovingMean",
+    "MixtureOfGaussianV2",
+    "KDE",
+    "FrigateImprovedMotion"
+  ],
+  "frigate": {
+    "threshold": 30,
+    "contour_area": 100,
+    "frame_alpha": 0.01,
+    "delta_alpha": 0.2,
+    "improve_contrast": true,
+    "frame_height": null,
+    "lightning_threshold": 0.8
+  },
+  "downscale_width": 720,
+  "max_frames": 0,
+  "morphology": {
+    "enabled": false,
+    "kernel_size": 5,
+    "iterations": 1
+  },
+  "contours": {
+    "min_area": 200,
+    "max_area_ratio": 0.9
+  }
+}

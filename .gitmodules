@@ -1,0 +1,3 @@
+[submodule "frigate"]
+	path = frigate
+	url = https://github.com/blakeblackshear/frigate

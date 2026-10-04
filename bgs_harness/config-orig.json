@@ -1,0 +1,21 @@
+{
+  "algorithms": [
+    "StaticFrameDifference",
+    "SuBSENSE",
+    "LOBSTER",
+    "WeightedMovingMean",
+    "MixtureOfGaussianV2",
+    "KDE"
+  ],
+  "downscale_width": 720,
+  "max_frames": 0,
+  "morphology": {
+    "enabled": true,
+    "kernel_size": 5,
+    "iterations": 1
+  },
+  "contours": {
+    "min_area": 800,
+    "max_area_ratio": 0.6
+  }
+}
