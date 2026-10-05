@@ -8,9 +8,8 @@
   },
   "algorithms": [
     "MixtureOfGaussianV2",
-    "KNN",
-    "FuzzySugenoIntegral",
-    "FuzzyChoquetIntegral",
+    "OpenCVMOG2",
+    "OpenCVMOG2_noshadow",
     "FrigateImprovedMotion"
   ],
   "frigate": {
@@ -27,10 +26,21 @@
   "morphology": {
     "enabled": true,
     "kernel_size": 3,
-    "iterations": 1
+    "iterations": 3
   },
   "contours": {
     "min_area": 200,
     "max_area_ratio": 0.9
+  },
+  "frigate_preproc": {
+    "enabled": false,
+    "gaussian_blur": false,
+    "gaussian_sigma": 1.0,
+    "gaussian_ksize": 3,
+    "contrast_norm": true,
+    "contrast_history": 50,
+    "contrast_min_pct": 4.0,
+    "contrast_max_pct": 96.0,
+    "persistence_frames": 2
   }
 }

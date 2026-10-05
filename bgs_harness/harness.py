@@ -1,3 +1,4 @@
+import argparse
 import csv
 import json
 import time
@@ -8,7 +9,9 @@ import cv2
 import numpy as np
 import pybgs
 
+from cv2_bgss import CV2_ALGORITHMS
 from frigate_adapter import FrigateMotionAlgorithm, VARIANTS
+from frigate_preproc import FrigatePreprocessor
 
 
 def load_config(config_path: str = "config.json") -> dict:
@@ -41,7 +44,12 @@ def roi_union_area_px(boxes: list, frame_w: int, frame_h: int) -> int:
 
 
 def process_video(
-    video_path: Path, algo_name: str, config: dict, output_dir: Path
+    video_path: Path,
+    algo_name: str,
+    config: dict,
+    output_dir: Path,
+    bgs_algo=None,
+    write_video: bool = True,
 ) -> dict:
     """Processes a single video stream using a pybgs algorithm and returns evaluation metrics.
 
@@ -82,16 +90,27 @@ def process_video(
             fps,
             config.get("frigate", {}),
         )
-    else:
-        bgs_algo = get_bgs_algorithm(algo_name)
+    elif bgs_algo is None:
+        if algo_name in CV2_ALGORITHMS:
+            bgs_algo = CV2_ALGORITHMS[algo_name]()
+        else:
+            bgs_algo = get_bgs_algorithm(algo_name)
+
+    preproc = None
+    if not is_frigate and config.get("frigate_preproc", {}).get("enabled"):
+        preproc = FrigatePreprocessor(
+            config["frigate_preproc"], target_w, target_h
+        )
 
     output_filename = (
         output_dir / f"{video_path.stem}_{algo_name}_annotated.mp4"
     )
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-    writer = cv2.VideoWriter(
-        str(output_filename), fourcc, fps, (target_w * 2, target_h)
-    )
+    writer = None
+    if write_video:
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        writer = cv2.VideoWriter(
+            str(output_filename), fourcc, fps, (target_w * 2, target_h)
+        )
 
     morphology_cfg = config["morphology"]
     kernel = None
@@ -132,6 +151,9 @@ def process_video(
             resized_frame = cv2.resize(
                 frame, (target_w, target_h), interpolation=cv2.INTER_AREA
             )
+
+        if preproc is not None:
+            resized_frame = preproc.preprocess(resized_frame)
 
         bgs_start = time.perf_counter()
 
@@ -191,6 +213,11 @@ def process_video(
                     x, y, w, h = cv2.boundingRect(cnt)
                     frame_rois.append((x, y, w, h))
 
+            if preproc is not None:
+                frame_rois = preproc.filter_persistent(
+                    frame_rois, target_w, target_h
+                )
+
         bgs_time_ms = (time.perf_counter() - bgs_start) * 1000.0
         total_bgs_time_ms += bgs_time_ms
 
@@ -210,40 +237,41 @@ def process_video(
             frames_triggered += 1
             total_rois += num_rois
 
-        annotated_frame = resized_frame.copy()
-        for x, y, w, h in frame_rois:
-            cv2.rectangle(
-                annotated_frame, (x, y), (x + w, y + h), (0, 255, 0), 2
-            )
-            if h > 24:
-                cv2.putText(
-                    annotated_frame,
-                    "ROI -> YOLO",
-                    (x + 2, max(y + 16, 18)),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.45,
-                    (0, 255, 0),
-                    1,
+        if write_video:
+            annotated_frame = resized_frame.copy()
+            for x, y, w, h in frame_rois:
+                cv2.rectangle(
+                    annotated_frame, (x, y), (x + w, y + h), (0, 255, 0), 2
                 )
+                if h > 24:
+                    cv2.putText(
+                        annotated_frame,
+                        "ROI -> YOLO",
+                        (x + 2, max(y + 16, 18)),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.45,
+                        (0, 255, 0),
+                        1,
+                    )
 
-        mask_3ch = cv2.cvtColor(cleaned_mask, cv2.COLOR_GRAY2BGR)
+            mask_3ch = cv2.cvtColor(cleaned_mask, cv2.COLOR_GRAY2BGR)
 
-        hud_text = (
-            f"{algo_name} | F{frames_processed} | "
-            f"ROIs: {num_rois} | {bgs_time_ms:.1f}ms"
-        )
-        cv2.putText(
-            annotated_frame,
-            hud_text,
-            (10, 25),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.5,
-            (0, 255, 255),
-            1,
-        )
+            hud_text = (
+                f"{algo_name} | F{frames_processed} | "
+                f"ROIs: {num_rois} | {bgs_time_ms:.1f}ms"
+            )
+            cv2.putText(
+                annotated_frame,
+                hud_text,
+                (10, 25),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.5,
+                (0, 255, 255),
+                1,
+            )
 
-        composite_view = np.hstack((annotated_frame, mask_3ch))
-        writer.write(composite_view)
+            composite_view = np.hstack((annotated_frame, mask_3ch))
+            writer.write(composite_view)
 
         if frames_processed % 100 == 0:
             total_hint = f"/{total_frames_hint}" if total_frames_hint else ""
@@ -256,7 +284,8 @@ def process_video(
             )
 
     cap.release()
-    writer.release()
+    if writer is not None:
+        writer.release()
     run_time_s = time.perf_counter() - run_start
 
     if frames_processed > 0:
@@ -297,7 +326,7 @@ def process_video(
         "avg_bgs_latency_ms": round(avg_bgs_ms, 2),
         "avg_preprocess_ms": round(avg_preprocess_ms, 2),
         "run_wall_time_s": round(run_time_s, 1),
-        "output_video": output_filename.name,
+        "output_video": output_filename.name if write_video else "",
     }
 
 
@@ -326,10 +355,36 @@ def print_summary_table(all_metrics: list) -> None:
 
 
 def main():
-    config = load_config("config.json")
+    ap = argparse.ArgumentParser(description="BGS benchmark harness.")
+    ap.add_argument("--config", default="config.json", help="Config file.")
+    ap.add_argument("--output-dir", default="outputs", help="Output directory.")
+    ap.add_argument(
+        "--preproc",
+        nargs="*",
+        default=None,
+        help="Enable Frigate-inspired preprocessing for the non-Frigate BGS "
+        "path. No value = all three (contrast, blur, persist). Pass a subset "
+        "to ablate: 'contrast', 'blur', 'persist'.",
+    )
+    args = ap.parse_args()
+
+    config = load_config(args.config)
+    if args.preproc is not None:
+        fpp = config.setdefault("frigate_preproc", {})
+        fpp["enabled"] = True
+        if args.preproc:
+            techniques = set(args.preproc)
+            fpp["contrast_norm"] = "contrast" in techniques
+            fpp["gaussian_blur"] = "blur" in techniques
+            if "persist" in techniques:
+                if int(fpp.get("persistence_frames", 0)) < 1:
+                    fpp["persistence_frames"] = 3
+            else:
+                fpp["persistence_frames"] = 0
+        # else: no value -> run the recipe as configured in config.json
     input_dir = Path("processed_videos")
-    output_dir = Path("outputs")
-    output_dir.mkdir(exist_ok=True)
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
     Path("config").mkdir(exist_ok=True)
 
     video_files = sorted(
